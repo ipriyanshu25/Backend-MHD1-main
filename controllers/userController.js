@@ -148,13 +148,91 @@ exports.getUserById = async (req, res) => {
     if (!userId) {
       return res.status(400).json({ message: 'Please provide a userId.' });
     }
+    // Fetch user
     const user = await User.findOne({ userId }, '-password -__v').lean();
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
     }
+    // Fetch manager name
+    const manager = await Employee.findOne({ employeeId: user.worksUnder }, 'name').lean();
+    user.worksUnderName = manager ? manager.name : null;
+
+    // Fetch link titles for each entry
+    if (user.entries && user.entries.length) {
+      const entriesWithTitles = await Promise.all(
+        user.entries.map(async entry => {
+          const linkDoc = await Link.findById(entry.linkId, 'title').lean();
+          return {
+            ...entry,
+            linkTitle: linkDoc ? linkDoc.title : null
+          };
+        })
+      );
+      user.entries = entriesWithTitles;
+    }
+
     res.status(200).json({ user });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+exports.getUsersByEmployeeId = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    if (!employeeId) {
+      return res.status(400).json({ message: 'Please provide an employeeId.' });
+    }
+    // Find users who work under the given employee
+    const users = await User.find(
+      { worksUnder: employeeId },
+      '-password -__v'
+    ).lean();
+    res.status(200).json({ users });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+
+exports.listLinksForUser = async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ message: 'Please provide userId.' });
+    }
+
+    // Fetch all links
+    const links = await Link.find().lean();
+    if (links.length === 0) {
+      return res.json([]);
+    }
+
+    // Determine the latest link
+    const latestLink = links.reduce((prev, curr) =>
+      new Date(prev.createdAt) > new Date(curr.createdAt) ? prev : curr
+    );
+    const latestId = latestLink._id.toString();
+
+    // Fetch user's completed link IDs
+    const user = await User.findOne({ userId }, 'entries').lean();
+    const completedSet = new Set(
+      (user && user.entries || []).map(entry => entry.linkId.toString())
+    );
+
+    // Annotate links
+    const annotated = links.map(link => ({
+      ...link,
+      isLatest: link._id.toString() === latestId,
+      isCompleted: completedSet.has(link._id.toString()) ? 1 : 0
+    }));
+
+    // Return in reverse order
+    return res.json(annotated.reverse());
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error.' });
   }
 };
