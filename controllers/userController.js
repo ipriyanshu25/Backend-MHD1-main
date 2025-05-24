@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Employee = require('../models/Employee'); // use capital E to match file
+const Link   = require('../models/Link'); 
 
 exports.register = async (req, res) => {
   try {
@@ -67,6 +68,62 @@ exports.login = async (req, res) => {
 
     // Authentication successful — return userId
     return res.status(200).json({ message:"Login Successful",userId: user.userId });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+
+exports.submitEntry = async (req, res) => {
+  try {
+    const { userId, name, upiId, linkId, noOfPersons } = req.body;
+    if (!userId || !name || !upiId || !linkId || !noOfPersons) {
+      return res.status(400).json({ message: 'Provide userId, name, upiId, linkId and noOfPersons.' });
+    }
+
+    // 1. Fetch the link by its _id and amount
+    const link = await Link.findById(linkId);
+    if (!link) {
+      return res.status(404).json({ message: 'Invalid linkId.' });
+    }
+    const linkAmount = link.amount;
+
+    // 2. Calculate totalAmount
+    const totalAmount = noOfPersons * linkAmount;
+
+    // 3. Verify user exists and UPI matches
+    const user = await User.findOne({ userId });
+    if (!user) {
+      return res.status(404).json({ message: 'No user found with that userId.' });
+    }
+    if (user.upiId !== upiId) {
+      return res.status(400).json({ message: 'Provided UPI ID does not match your account.' });
+    }
+
+    // 4. Prevent duplicate entry by same user
+    if (user.entries.some(entry => entry.linkId.toString() === linkId)) {
+      return res.status(400).json({ message: 'You have already submitted for this link.' });
+    }
+
+    // 5. Prevent reuse of same UPI by another user
+    const conflict = await User.findOne({
+      'entries.linkId': linkId,
+      'entries.upiId': upiId
+    });
+    if (conflict) {
+      return res.status(400).json({ message: 'This link has already been claimed with that UPI ID.' });
+    }
+
+    // 6. Prepare new entry and push via updateOne (avoids validating existing entries)
+    const newEntry = { linkId, noOfPersons, upiId, name, userId, linkAmount, totalAmount, submittedAt: new Date() };
+    await User.updateOne(
+      { userId },
+      { $push: { entries: newEntry } }
+    );
+
+    // 7. Return response with the newly created entry
+    return res.status(201).json({ message: 'Entry submitted successfully.', entry: newEntry });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Server error.' });
