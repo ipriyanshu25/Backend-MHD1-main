@@ -12,6 +12,6 @@ router.get('/get',getAllUsers);
 router.get('/getbyuserId/:userId',getUserById);
 router.get('/getbyemployeeid/:employeeId',getUsersByEmployeeId);
 // In routes/link.js (or user.js):
-router.post('/linksstatus',listLinksForUser);
+router.post('/link',listLinksForUser);
 
 module.exports = router;
