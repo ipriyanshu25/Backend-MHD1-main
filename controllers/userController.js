@@ -238,42 +238,52 @@ exports.listLinksForUser = async (req, res) => {
 };
 
 
+// controllers/UserController.js
+
 exports.updateUser = async (req, res) => {
   try {
     const { userId, name, upiId } = req.body;
 
+    // 1) Must have userId
     if (!userId) {
       return res.status(400).json({ message: 'Please provide userId.' });
     }
+    // 2) Must have something to update
     if (!name && !upiId) {
       return res.status(400).json({ message: 'Provide at least one of name or upiId to update.' });
     }
 
-    const user = await User.findOne({ userId });
-    if (!user) {
+    // 3) If upiId is changing, ensure it's not in use
+    if (upiId) {
+      const conflict = await User.findOne({ upiId });
+      if (conflict && conflict.userId !== userId) {
+        return res.status(400).json({ message: 'This UPI ID is already in use.' });
+      }
+    }
+
+    // 4) Build the $set payload
+    const updates = {};
+    if (name)  updates.name  = name;
+    if (upiId) updates.upiId = upiId;
+
+    // 5) Atomic update (won't re-validate every sub-document)
+    const updatedUser = await User.findOneAndUpdate(
+      { userId },
+      { $set: updates },
+      { new: true, projection: { password: 0, __v: 0 } }
+    );
+
+    if (!updatedUser) {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    if (upiId && upiId !== user.upiId) {
-      const conflict = await User.findOne({ upiId });
-      if (conflict) {
-        return res.status(400).json({ message: 'This UPI ID is already in use.' });
-      }
-      user.upiId = upiId;
-    }
-
-    if (name) {
-      user.name = name;
-    }
-
-    await user.save();
-
+    // 6) Return only the changed bits
     return res.status(200).json({
       message: 'User updated successfully.',
       user: {
-        userId: user.userId,
-        name: user.name,
-        upiId: user.upiId
+        userId: updatedUser.userId,
+        name: updatedUser.name,
+        upiId: updatedUser.upiId
       }
     });
   } catch (err) {
