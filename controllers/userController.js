@@ -293,3 +293,110 @@ exports.updateUser = async (req, res) => {
     return res.status(500).json({ message: 'Server error.' });
   }
 };
+
+
+
+// controllers/UserController.js
+exports.updateEntry = async (req, res) => {
+  try {
+    const { entryId, noOfPersons } = req.body;
+    if (!entryId || noOfPersons === undefined) {
+      return res
+        .status(400)
+        .json({ message: 'Please provide entryId and noOfPersons.' });
+    }
+
+    // Validate noOfPersons
+    const numPersons = Number(noOfPersons);
+    if (!Number.isInteger(numPersons) || numPersons < 1) {
+      return res
+        .status(400)
+        .json({ message: 'noOfPersons must be a positive integer.' });
+    }
+
+    // 1. Load the User that has this entry (by our custom entryId)
+    const user = await User.findOne(
+      { 'entries.entryId': entryId },
+      { 'entries.$': 1 }
+    );
+    if (!user || !user.entries.length) {
+      return res.status(404).json({ message: 'Entry not found.' });
+    }
+    const entry = user.entries[0];
+
+    // 2. Recalculate totalAmount
+    const newTotal = numPersons * entry.linkAmount;
+
+    // 3. Atomically update only those two fields on the matched sub-document
+    await User.updateOne(
+      { 'entries.entryId': entryId },
+      {
+        $set: {
+          'entries.$.noOfPersons': numPersons,
+          'entries.$.totalAmount': newTotal
+        }
+      }
+    );
+
+    // 4. Return the updated values
+    return res.status(200).json({
+      message: 'Entry updated successfully.',
+      entry: {
+        entryId: entry.entryId,
+        noOfPersons: numPersons,
+        totalAmount: newTotal
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+
+exports.setEntryStatus = async (req, res) => {
+  try {
+    const { entryId, approve } = req.body;
+    if (!entryId || approve === undefined) {
+      return res
+        .status(400)
+        .json({ message: 'Please provide entryId and approve (0 or 1).' });
+    }
+
+    const flag = Number(approve);
+    if (![0, 1].includes(flag)) {
+      return res
+        .status(400)
+        .json({ message: 'approve must be 0 (reject) or 1 (approve).' });
+    }
+
+    // 1. Make sure the entry exists
+    const user = await User.findOne(
+      { 'entries.entryId': entryId },
+      { 'entries.$': 1 }
+    );
+    if (!user || user.entries.length === 0) {
+      return res.status(404).json({ message: 'Entry not found.' });
+    }
+
+    // 2. Update the status field
+    await User.updateOne(
+      { 'entries.entryId': entryId },
+      { $set: { 'entries.$.status': flag } }
+    );
+
+    // 3. Send back the new status
+    const statusText = flag === 0 ? 'Rejected' : 'Approved';
+    return res.status(200).json({
+      message: `Entry ${statusText.toLowerCase()} successfully.`,
+      entry: {
+        entryId,
+        status: flag,
+        statusText
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error.' });
+  }
+};

@@ -8,7 +8,9 @@ const {
     getUserById,
     getUsersByEmployeeId,
     listLinksForUser,
-    updateUser
+    updateUser,
+    updateEntry,
+    setEntryStatus
 } = require('../controllers/userController');
 
 // Register endpoint
@@ -23,5 +25,7 @@ router.get('/getbyemployeeid/:employeeId', getUsersByEmployeeId);
 
 router.post('/link', listLinksForUser);
 router.post('/update', updateUser);
+router.post('/updateentry', updateEntry);
+router.post('/setstatus', setEntryStatus);
 
 module.exports = router;

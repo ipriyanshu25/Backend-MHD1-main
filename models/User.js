@@ -11,7 +11,12 @@ const entrySchema = new mongoose.Schema({
     telegramLink:{type:String,required:true},
     linkAmount: { type: Number, required: true },
     totalAmount: { type: Number, required: true },
-    submittedAt: { type: Date, default: Date.now }
+    submittedAt: { type: Date, default: Date.now },
+    status: {
+    type: Number,
+    enum: [0, 1],
+    default: null  // null → pending; 0 → rejected; 1 → approved
+  }
 }, { _id: false });
 
 const userSchema = new mongoose.Schema({
