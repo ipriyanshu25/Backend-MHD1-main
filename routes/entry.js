@@ -8,5 +8,6 @@ router.post('/getlist', entry.listEntries);              // type filter
 router.post('/updateEntry', entry.updateEntry);
 router.post('/updateStatus', entry.setEntryStatus);
 router.get('/getEntry/:entryId', entry.getEntryById);
+router.post('/listByLink', entry.listEntriesByLink);
 
 module.exports = router;

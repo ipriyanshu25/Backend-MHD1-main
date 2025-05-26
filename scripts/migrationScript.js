@@ -1,19 +1,23 @@
-const User  = require('../models/User');
-const Entry = require('../models/Entry');
-const uuid  = require('uuid').v4;
+// scripts/addTypeToEntries.js
+const mongoose = require('mongoose');
 
-(async () => {
-  const users = await User.find({ 'entries.0': { $exists: true } }).lean();
-  for (const u of users) {
-    for (const e of u.entries) {
-      await Entry.create({
-        ...e,
-        entryId: uuid(),
-        type: 1,
-        userId: u.userId
-      });
-    }
+async function runMigration() {
+  try {   
+    const Entry = mongoose.model('Entry', new mongoose.Schema({}, { strict: false }), 'entries');
+
+    // 2) Update all docs where "type" field does NOT exist
+    const result = await Entry.updateMany(
+      { type: { $exists: false } },
+      { $set: { type: 3 } }
+    );
+
+    console.log(`Matched ${result.matchedCount}, modified ${result.modifiedCount} documents.`);
+  } catch (err) {
+    console.error('Migration failed:', err);
+  } finally {
+    await mongoose.disconnect();
+    console.log('Disconnected from MongoDB');
   }
-  console.log('Migration done');
-  process.exit(0);
-})();
+}
+
+runMigration();

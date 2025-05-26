@@ -128,23 +128,10 @@ exports.createUserEntry = asyncHandler(async (req, res) => {
 /*     ➜ POST /entries/list                                           */
 /* ------------------------------------------------------------------ */
 exports.listEntries = asyncHandler(async (req, res) => {
-  const { type, employeeId, userId, linkId, page = 1, limit = 20 } = req.body;
-  const t = Number(type);
-  let filter = {};
+  const { employeeId, page = 1, limit = 20 } = req.body;
+  if (!employeeId) return badRequest(res, 'employeeId required');
 
-  if (t === 0) {
-    if (!employeeId) return badRequest(res, 'employeeId required');
-    filter = { type: 0, employeeId };
-  } else if (t === 1) {
-    if (!userId) return badRequest(res, 'userId required');
-    filter = { type: 1, userId };
-  } else if (t === 2) {
-    // admin – all entries
-  } else {
-    return badRequest(res, 'type must be 0, 1 or 2');
-  }
-
-  if (linkId) filter.linkId = linkId;
+  const filter = { employeeId };  // grabs all entries for this employee
 
   const [entries, total] = await Promise.all([
     Entry.find(filter)
@@ -155,9 +142,9 @@ exports.listEntries = asyncHandler(async (req, res) => {
     Entry.countDocuments(filter)
   ]);
 
-  res.json({
-    entries,
-    total,
+  return res.json({
+    entries,             // each entry still carries its `type` field
+    total,               // total matches for pagination
     page: Number(page),
     pages: Math.ceil(total / limit)
   });
@@ -238,5 +225,34 @@ exports.setEntryStatus = asyncHandler(async (req, res) => {
   res.json({
     message: approve ? 'Approved' : 'Rejected',
     entry: { entryId: entry.entryId, status: entry.status }
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  LIST – employee + specific link, POST /entries/listByLink         */
+/*     Body: { employeeId, linkId, page?, limit? }                    */
+/* ------------------------------------------------------------------ */
+exports.listEntriesByLink = asyncHandler(async (req, res) => {
+  const { employeeId, linkId, page = 1, limit = 20 } = req.body;
+  if (!employeeId) return badRequest(res, 'employeeId required');
+  if (!linkId)    return badRequest(res, 'linkId required');
+
+  // only employee entries (type 0), filtered by link
+  const filter = { type: 0, employeeId, linkId };
+
+  const [entries, total] = await Promise.all([
+    Entry.find(filter)
+         .sort({ createdAt: -1 })
+         .skip((page - 1) * limit)
+         .limit(Number(limit))
+         .lean(),
+    Entry.countDocuments(filter)
+  ]);
+
+  return res.json({
+    entries,             // array of entry docs
+    total,               // total matching documents
+    page: Number(page),
+    pages: Math.ceil(total / limit)
   });
 });
