@@ -228,17 +228,14 @@ exports.setEntryStatus = asyncHandler(async (req, res) => {
   });
 });
 
-/* ------------------------------------------------------------------ */
-/*  LIST – employee + specific link, POST /entries/listByLink         */
-/*     Body: { employeeId, linkId, page?, limit? }                    */
-/* ------------------------------------------------------------------ */
+// controllers/entryController.js
 exports.listEntriesByLink = asyncHandler(async (req, res) => {
   const { employeeId, linkId, page = 1, limit = 20 } = req.body;
   if (!employeeId) return badRequest(res, 'employeeId required');
   if (!linkId)    return badRequest(res, 'linkId required');
 
-  // only employee entries (type 0), filtered by link
-  const filter = { type: 0, employeeId, linkId };
+  // Now both employeeId and linkId are strings in your DB
+  const filter = { employeeId, linkId };
 
   const [entries, total] = await Promise.all([
     Entry.find(filter)
@@ -250,9 +247,9 @@ exports.listEntriesByLink = asyncHandler(async (req, res) => {
   ]);
 
   return res.json({
-    entries,             // array of entry docs
-    total,               // total matching documents
-    page: Number(page),
+    entries,             // matching entries
+    total,               // how many in all
+    page:  Number(page),
     pages: Math.ceil(total / limit)
   });
 });
