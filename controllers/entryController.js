@@ -233,6 +233,10 @@ exports.setEntryStatus = asyncHandler(async (req, res) => {
 /*  LIST – employee + specific link, POST /entries/listByLink         */
 /*     Body: { employeeId, linkId, page?, limit? }                    */
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/*  LIST – employee + specific link, POST /entries/listByLink         */
+/*     Body: { employeeId, linkId, page?, limit? }                    */
+/* ------------------------------------------------------------------ */
 exports.listEntriesByLink = asyncHandler(async (req, res) => {
   const { employeeId, linkId, page = 1, limit = 20 } = req.body;
   if (!employeeId) return badRequest(res, 'employeeId required');
@@ -247,6 +251,7 @@ exports.listEntriesByLink = asyncHandler(async (req, res) => {
     ]
   };
 
+  // 1) page of entries
   const [entries, total] = await Promise.all([
     Entry.find(filter)
          .sort({ createdAt: -1 })
@@ -256,11 +261,24 @@ exports.listEntriesByLink = asyncHandler(async (req, res) => {
     Entry.countDocuments(filter)
   ]);
 
+  // 2) compute grandTotal across all matching docs
+  const agg = await Entry.aggregate([
+    { $match: filter },
+    { $group: {
+        _id: null,
+        grandTotal: {
+          $sum: { $ifNull: ["$totalAmount", "$amount"] }
+        }
+    }}
+  ]);
+  const grandTotal = agg[0]?.grandTotal ?? 0;
+
+  // 3) return results + pagination + grandTotal
   return res.json({
-    entries,             // array of entry docs
-    total,               // total matching documents
-    page:  Number(page),
-    pages: Math.ceil(total / limit)
+    entries,          // array of entry docs
+    total,            // how many matched
+    page: Number(page),
+    pages: Math.ceil(total / limit),
+    grandTotal        // sum of totalAmount|amount across all matched entries
   });
 });
-
