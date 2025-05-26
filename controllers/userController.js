@@ -229,13 +229,15 @@ exports.listLinksForUser = async (req, res) => {
       isCompleted: completedSet.has(link._id.toString()) ? 1 : 0
     }));
 
-    // Return in reverse order
-    return res.json(annotated.reverse());
+    // Return only the top 3, in reverse-chronological order
+    const topThree = annotated.reverse().slice(0, 3);
+    return res.json(topThree);
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Server error.' });
   }
 };
+
 
 
 // controllers/UserController.js
