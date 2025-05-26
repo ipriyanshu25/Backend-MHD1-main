@@ -23,6 +23,7 @@ const entrySchema = new mongoose.Schema({
   /* user only ------------------------------------------------------ */
   userId: { type: String, ref: 'User' },
   noOfPersons: { type: Number, min: 1 },
+  worksUnder: { type: String, ref: 'User' }, // who created this entry
   linkAmount: { type: Number },      // snapshot of Link.amount
   totalAmount: { type: Number },      // noOfPersons * linkAmount
   telegramLink: { type: String },

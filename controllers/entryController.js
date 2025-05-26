@@ -87,8 +87,8 @@ exports.createEmployeeEntry = asyncHandler(async (req, res) => {
 /*     - verify user exists + matches UPI                               */
 /* ------------------------------------------------------------------ */
 exports.createUserEntry = asyncHandler(async (req, res) => {
-  const { userId, linkId, name, upiId, noOfPersons, telegramLink } = req.body;
-  if (!userId || !linkId || !name || !upiId || !noOfPersons || !telegramLink)
+  const { userId, linkId, name,worksUnder, upiId, noOfPersons, telegramLink } = req.body;
+  if (!userId || !linkId || !name || !worksUnder||!upiId || !noOfPersons || !telegramLink)
     return badRequest(res, 'userId, linkId, name, upiId, noOfPersons & telegramLink required');
 
   const user = await User.findOne({ userId });
@@ -113,6 +113,7 @@ exports.createUserEntry = asyncHandler(async (req, res) => {
     userId,
     linkId,
     name: name.trim(),
+    worksUnder: worksUnder.trim(),
     upiId: upiId.trim(),
     noOfPersons: Number(noOfPersons),
     linkAmount: link.amount,
