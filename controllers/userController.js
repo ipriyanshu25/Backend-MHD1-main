@@ -1,41 +1,41 @@
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const Employee = require('../models/Employee'); // use capital E to match file
-const Link   = require('../models/Link'); 
+// controllers/userController.js
+const bcrypt   = require('bcryptjs');
+const User     = require('../models/User');
+const Employee = require('../models/Employee');
+const Link     = require('../models/Link');
+const Entry    = require('../models/Entry');      // ⬅️ new – for look-ups only
 
+/* ------------------------------------------------------------------ */
+/*  auth – register / login                                           */
+/* ------------------------------------------------------------------ */
 exports.register = async (req, res) => {
   try {
     const { name, phone, email, password, worksUnder, upiId } = req.body;
     if (!name || !phone || !email || !password || !worksUnder || !upiId) {
-      return res.status(400).json({ message: 'Please provide name, phone, email, password, worksUnder (employeeId), and upiId.' });
+      return res.status(400).json({
+        message: 'Please provide name, phone, email, password, worksUnder (employeeId), and upiId.'
+      });
     }
 
-    // Validate manager exists
+    /* manager exists? */
     const manager = await Employee.findOne({ employeeId: worksUnder });
-    if (!manager) {
+    if (!manager)
       return res.status(404).json({ message: 'No employee exists with the provided ID.' });
-    }
 
-    // Validate phone
+    /* phone numeric + unique checks */
     const phoneNum = Number(phone);
-    if (!Number.isInteger(phoneNum)) {
+    if (!Number.isInteger(phoneNum))
       return res.status(400).json({ message: 'Phone number must be numeric.' });
-    }
 
-    // Check existing users by phone, email or upiId
-    const exists = await User.findOne({ $or: [{ phone: phoneNum }, { email }, { upiId }] });
-    if (exists) {
+    const exists = await User.findOne({
+      $or: [{ phone: phoneNum }, { email }, { upiId }]
+    });
+    if (exists)
       return res.status(400).json({ message: 'User with that phone, email, or UPI ID already exists.' });
-    }
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hash = await bcrypt.hash(password, salt);
-
-    // Create user
-    const user = new User({ name, phone: phoneNum, email, password: hash, worksUnder, upiId });
-    await user.save();
+    /* hash + create */
+    const hash  = await bcrypt.hash(password, await bcrypt.genSalt(10));
+    const user  = await User.create({ name, phone: phoneNum, email, password: hash, worksUnder, upiId });
 
     res.status(201).json({ message: 'User registered successfully.', userId: user.userId });
   } catch (err) {
@@ -47,131 +47,62 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { phone, password } = req.body;
-    if (!phone || !password) {
+    if (!phone || !password)
       return res.status(400).json({ message: 'Please provide phone and password.' });
-    }
 
     const phoneNum = Number(phone);
-    if (!Number.isInteger(phoneNum)) {
+    if (!Number.isInteger(phoneNum))
       return res.status(400).json({ message: 'Phone number must be numeric.' });
-    }
 
     const user = await User.findOne({ phone: phoneNum });
-    if (!user) {
+    if (!user || !(await bcrypt.compare(password, user.password)))
       return res.status(400).json({ message: 'Invalid credentials.' });
-    }
 
-    const match = await bcrypt.compare(password, user.password);
-    if (!match) {
-      return res.status(400).json({ message: 'Invalid credentials.' });
-    }
-
-    // Authentication successful — return userId
-    return res.status(200).json({ message:"Login Successful",userId: user.userId });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: 'Server error.' });
-  }
-};
-
-
-exports.submitEntry = async (req, res) => {
-  try {
-    const { userId, name, upiId, linkId, noOfPersons,telegramLink } = req.body;
-    if (!userId || !name || !upiId || !linkId || !noOfPersons || !telegramLink) {
-      return res.status(400).json({ message: 'Provide userId, name, upiId, linkId and noOfPersons.' });
-    }
-
-    // 1. Fetch the link by its _id and amount
-    const link = await Link.findById(linkId);
-    if (!link) {
-      return res.status(404).json({ message: 'Invalid linkId.' });
-    }
-    const linkAmount = link.amount;
-
-    // 2. Calculate totalAmount
-    const totalAmount = noOfPersons * linkAmount;
-
-    // 3. Verify user exists and UPI matches
-    const user = await User.findOne({ userId });
-    if (!user) {
-      return res.status(404).json({ message: 'No user found with that userId.' });
-    }
-    if (user.upiId !== upiId) {
-      return res.status(400).json({ message: 'Provided UPI ID does not match your account.' });
-    }
-
-    // 4. Prevent duplicate entry by same user
-    if (user.entries.some(entry => entry.linkId.toString() === linkId)) {
-      return res.status(400).json({ message: 'You have already submitted for this link.' });
-    }
-
-    // 5. Prevent reuse of same UPI by another user
-    const conflict = await User.findOne({
-      'entries.linkId': linkId,
-      'entries.upiId': upiId
-    });
-    if (conflict) {
-      return res.status(400).json({ message: 'This link has already been claimed with that UPI ID.' });
-    }
-
-    // 6. Prepare new entry and push via updateOne (avoids validating existing entries)
-    const newEntry = { linkId, noOfPersons, upiId, name, userId,telegramLink, linkAmount, totalAmount, submittedAt: new Date() };
-    await User.updateOne(
-      { userId },
-      { $push: { entries: newEntry } }
-    );
-
-    // 7. Return response with the newly created entry
-    return res.status(201).json({ message: 'Entry submitted successfully.', entry: newEntry });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: 'Server error.' });
-  }
-};
-
-
-exports.getAllUsers = async (req, res) => {
-  try {
-    const users = await User.find({}, '-password -__v').lean();
-    res.status(200).json({ users });
+    res.status(200).json({ message: 'Login Successful', userId: user.userId });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error.' });
   }
 };
 
+/* ------------------------------------------------------------------ */
+/*  summaries & look-ups                                              */
+/* ------------------------------------------------------------------ */
+exports.getAllUsers = async (_req, res) => {
+  try {
+    const users = await User.find({}, '-password -__v').lean();
+    res.json({ users });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
 
 exports.getUserById = async (req, res) => {
   try {
     const { userId } = req.params;
-    if (!userId) {
-      return res.status(400).json({ message: 'Please provide a userId.' });
-    }
-    // Fetch user
+    if (!userId) return res.status(400).json({ message: 'Please provide a userId.' });
+
+    /* base user */
     const user = await User.findOne({ userId }, '-password -__v').lean();
-    if (!user) {
-      return res.status(404).json({ message: 'User not found.' });
-    }
-    // Fetch manager name
-    const manager = await Employee.findOne({ employeeId: user.worksUnder }, 'name').lean();
-    user.worksUnderName = manager ? manager.name : null;
+    if (!user) return res.status(404).json({ message: 'User not found.' });
 
-    // Fetch link titles for each entry
-    if (user.entries && user.entries.length) {
-      const entriesWithTitles = await Promise.all(
-        user.entries.map(async entry => {
-          const linkDoc = await Link.findById(entry.linkId, 'title').lean();
-          return {
-            ...entry,
-            linkTitle: linkDoc ? linkDoc.title : null
-          };
-        })
-      );
-      user.entries = entriesWithTitles;
-    }
+    /* manager name */
+    const mgr = await Employee.findOne({ employeeId: user.worksUnder }, 'name').lean();
+    user.worksUnderName = mgr ? mgr.name : null;
 
-    res.status(200).json({ user });
+    /* pull entries from NEW collection --------------------------------*/
+    const entries = await Entry.find({ type: 1, userId }).lean();
+
+    /* attach link titles */
+    user.entries = await Promise.all(
+      entries.map(async e => {
+        const l = await Link.findById(e.linkId, 'title').lean();
+        return { ...e, linkTitle: l ? l.title : null };
+      })
+    );
+
+    res.json({ user });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error.' });
@@ -181,222 +112,77 @@ exports.getUserById = async (req, res) => {
 exports.getUsersByEmployeeId = async (req, res) => {
   try {
     const { employeeId } = req.params;
-    if (!employeeId) {
+    if (!employeeId)
       return res.status(400).json({ message: 'Please provide an employeeId.' });
-    }
-    // Find users who work under the given employee
-    const users = await User.find(
-      { worksUnder: employeeId },
-      '-password -__v'
-    ).lean();
-    res.status(200).json({ users });
+
+    const users = await User.find({ worksUnder: employeeId }, '-password -__v').lean();
+    res.json({ users });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error.' });
   }
 };
 
-
+/* show the three newest links, plus completed flags for this user ---- */
 exports.listLinksForUser = async (req, res) => {
   try {
     const { userId } = req.body;
-    if (!userId) {
-      return res.status(400).json({ message: 'Please provide userId.' });
-    }
+    if (!userId) return res.status(400).json({ message: 'Please provide userId.' });
 
-    // Fetch all links
-    const links = await Link.find().lean();
-    if (links.length === 0) {
-      return res.json([]);
-    }
+    const links = await Link.find().sort({ createdAt: -1 }).limit(3).lean();
+    if (links.length === 0) return res.json([]);
 
-    // Determine the latest link
-    const latestLink = links.reduce((prev, curr) =>
-      new Date(prev.createdAt) > new Date(curr.createdAt) ? prev : curr
-    );
-    const latestId = latestLink._id.toString();
+    const completedIds = await Entry.distinct('linkId', { type: 1, userId });
+    const doneSet = new Set(completedIds.map(id => id.toString()));
+    const latestId = links[0]._id.toString();
 
-    // Fetch user's completed link IDs
-    const user = await User.findOne({ userId }, 'entries').lean();
-    const completedSet = new Set(
-      (user && user.entries || []).map(entry => entry.linkId.toString())
-    );
-
-    // Annotate links
-    const annotated = links.map(link => ({
-      ...link,
-      isLatest: link._id.toString() === latestId,
-      isCompleted: completedSet.has(link._id.toString()) ? 1 : 0
+    const annotated = links.map(l => ({
+      ...l,
+      isLatest: l._id.toString() === latestId,
+      isCompleted: doneSet.has(l._id.toString()) ? 1 : 0
     }));
 
-    // Return only the top 3, in reverse-chronological order
-    const topThree = annotated.reverse().slice(0, 3);
-    return res.json(topThree);
+    res.json(annotated);
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'Server error.' });
+    res.status(500).json({ message: 'Server error.' });
   }
 };
 
-
-
-// controllers/UserController.js
-
+/* ------------------------------------------------------------------ */
+/*  profile update (name / upi)                                        */
+/* ------------------------------------------------------------------ */
 exports.updateUser = async (req, res) => {
   try {
     const { userId, name, upiId } = req.body;
-
-    // 1) Must have userId
-    if (!userId) {
-      return res.status(400).json({ message: 'Please provide userId.' });
-    }
-    // 2) Must have something to update
-    if (!name && !upiId) {
+    if (!userId) return res.status(400).json({ message: 'Please provide userId.' });
+    if (!name && !upiId)
       return res.status(400).json({ message: 'Provide at least one of name or upiId to update.' });
-    }
 
-    // 3) If upiId is changing, ensure it's not in use
     if (upiId) {
-      const conflict = await User.findOne({ upiId });
-      if (conflict && conflict.userId !== userId) {
+      const clash = await User.findOne({ upiId });
+      if (clash && clash.userId !== userId)
         return res.status(400).json({ message: 'This UPI ID is already in use.' });
-      }
     }
 
-    // 4) Build the $set payload
     const updates = {};
     if (name)  updates.name  = name;
     if (upiId) updates.upiId = upiId;
 
-    // 5) Atomic update (won't re-validate every sub-document)
-    const updatedUser = await User.findOneAndUpdate(
+    const updated = await User.findOneAndUpdate(
       { userId },
       { $set: updates },
       { new: true, projection: { password: 0, __v: 0 } }
     );
+    if (!updated) return res.status(404).json({ message: 'User not found.' });
 
-    if (!updatedUser) {
-      return res.status(404).json({ message: 'User not found.' });
-    }
-
-    // 6) Return only the changed bits
-    return res.status(200).json({
+    res.json({
       message: 'User updated successfully.',
-      user: {
-        userId: updatedUser.userId,
-        name: updatedUser.name,
-        upiId: updatedUser.upiId
-      }
+      user: { userId: updated.userId, name: updated.name, upiId: updated.upiId }
     });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'Server error.' });
+    res.status(500).json({ message: 'Server error.' });
   }
 };
-
-
-
-// controllers/UserController.js
-exports.updateEntry = async (req, res) => {
-  try {
-    const { entryId, noOfPersons } = req.body;
-    if (!entryId || noOfPersons === undefined) {
-      return res
-        .status(400)
-        .json({ message: 'Please provide entryId and noOfPersons.' });
-    }
-
-    // Validate noOfPersons
-    const numPersons = Number(noOfPersons);
-    if (!Number.isInteger(numPersons) || numPersons < 1) {
-      return res
-        .status(400)
-        .json({ message: 'noOfPersons must be a positive integer.' });
-    }
-
-    // 1. Load the User that has this entry (by our custom entryId)
-    const user = await User.findOne(
-      { 'entries.entryId': entryId },
-      { 'entries.$': 1 }
-    );
-    if (!user || !user.entries.length) {
-      return res.status(404).json({ message: 'Entry not found.' });
-    }
-    const entry = user.entries[0];
-
-    // 2. Recalculate totalAmount
-    const newTotal = numPersons * entry.linkAmount;
-
-    // 3. Atomically update only those two fields on the matched sub-document
-    await User.updateOne(
-      { 'entries.entryId': entryId },
-      {
-        $set: {
-          'entries.$.noOfPersons': numPersons,
-          'entries.$.totalAmount': newTotal
-        }
-      }
-    );
-
-    // 4. Return the updated values
-    return res.status(200).json({
-      message: 'Entry updated successfully.',
-      entry: {
-        entryId: entry.entryId,
-        noOfPersons: numPersons,
-        totalAmount: newTotal
-      }
-    });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: 'Server error.' });
-  }
-};
-
-
-exports.setEntryStatus = async (req, res) => {
-  try {
-    const { entryId, approve } = req.body;
-    if (!entryId || approve === undefined) {
-      return res
-        .status(400)
-        .json({ message: 'Please provide entryId and approve (0 or 1).' });
-    }
-
-    const flag = Number(approve);
-    if (![0, 1].includes(flag)) {
-      return res
-        .status(400)
-        .json({ message: 'approve must be 0 (reject) or 1 (approve).' });
-    }
-
-    // 1. Make sure the entry exists
-    const user = await User.findOne(
-      { 'entries.entryId': entryId },
-      { 'entries.$': 1 }
-    );
-    if (!user || user.entries.length === 0) {
-      return res.status(404).json({ message: 'Entry not found.' });
-    }
-
-    // 2. Update the status field
-    await User.updateOne(
-      { 'entries.entryId': entryId },
-      { $set: { 'entries.$.status': flag } }
-    );
-
-    // 3. Send back the new status
-    const statusText = flag === 0 ? 'Rejected' : 'Approved';
-    return res.status(200).json({
-      message: `Entry ${statusText.toLowerCase()} successfully.`,
-      entry: {
-        entryId,
-        status: flag,
-        statusText
-      }
-    });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: 'Server error.' });
-  }
-};
+/* ------------------------------------------------------------------ */
