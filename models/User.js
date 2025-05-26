@@ -2,14 +2,16 @@ const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
 
 const entrySchema = new mongoose.Schema({
-  linkId:      { type: mongoose.Schema.Types.ObjectId, ref: 'Link', required: true },
-  noOfPersons: { type: Number, required: true, min: [1, 'At least one person required'] },
-  name:        { type: String, required: true },
-  userId:      { type: String, required: true },
-  upiId:       { type: String, required: true },
-  linkAmount:  { type: Number, required: true },
-  totalAmount: { type: Number, required: true },
-  submittedAt: { type: Date,   default: Date.now }
+    entryId: { type: String, required: true, default: uuidv4 },
+    linkId: { type: mongoose.Schema.Types.ObjectId, ref: 'Link', required: true },
+    noOfPersons: { type: Number, required: true, min: [1, 'At least one person required'] },
+    name: { type: String, required: true },
+    userId: { type: String, required: true },
+    upiId: { type: String, required: true },
+    telegramLink:{type:String,required:true},
+    linkAmount: { type: Number, required: true },
+    totalAmount: { type: Number, required: true },
+    submittedAt: { type: Date, default: Date.now }
 }, { _id: false });
 
 const userSchema = new mongoose.Schema({

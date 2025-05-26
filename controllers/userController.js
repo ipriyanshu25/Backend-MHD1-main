@@ -77,8 +77,8 @@ exports.login = async (req, res) => {
 
 exports.submitEntry = async (req, res) => {
   try {
-    const { userId, name, upiId, linkId, noOfPersons } = req.body;
-    if (!userId || !name || !upiId || !linkId || !noOfPersons) {
+    const { userId, name, upiId, linkId, noOfPersons,telegramLink } = req.body;
+    if (!userId || !name || !upiId || !linkId || !noOfPersons || !telegramLink) {
       return res.status(400).json({ message: 'Provide userId, name, upiId, linkId and noOfPersons.' });
     }
 
@@ -116,7 +116,7 @@ exports.submitEntry = async (req, res) => {
     }
 
     // 6. Prepare new entry and push via updateOne (avoids validating existing entries)
-    const newEntry = { linkId, noOfPersons, upiId, name, userId, linkAmount, totalAmount, submittedAt: new Date() };
+    const newEntry = { linkId, noOfPersons, upiId, name, userId,telegramLink, linkAmount, totalAmount, submittedAt: new Date() };
     await User.updateOne(
       { userId },
       { $push: { entries: newEntry } }
@@ -231,6 +231,51 @@ exports.listLinksForUser = async (req, res) => {
 
     // Return in reverse order
     return res.json(annotated.reverse());
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+
+exports.updateUser = async (req, res) => {
+  try {
+    const { userId, name, upiId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ message: 'Please provide userId.' });
+    }
+    if (!name && !upiId) {
+      return res.status(400).json({ message: 'Provide at least one of name or upiId to update.' });
+    }
+
+    const user = await User.findOne({ userId });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    if (upiId && upiId !== user.upiId) {
+      const conflict = await User.findOne({ upiId });
+      if (conflict) {
+        return res.status(400).json({ message: 'This UPI ID is already in use.' });
+      }
+      user.upiId = upiId;
+    }
+
+    if (name) {
+      user.name = name;
+    }
+
+    await user.save();
+
+    return res.status(200).json({
+      message: 'User updated successfully.',
+      user: {
+        userId: user.userId,
+        name: user.name,
+        upiId: user.upiId
+      }
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Server error.' });
