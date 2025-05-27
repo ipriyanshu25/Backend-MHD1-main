@@ -212,22 +212,73 @@ exports.updateEntry = asyncHandler(async (req, res) => {
 /* ------------------------------------------------------------------ */
 exports.setEntryStatus = asyncHandler(async (req, res) => {
   const { entryId, approve } = req.body;
-  if (!entryId)                 return badRequest(res, 'entryId required');
-  if (![0, 1].includes(Number(approve)))
+  if (!entryId) return badRequest(res, 'entryId required');
+  if (![0,1].includes(Number(approve)))
     return badRequest(res, 'approve must be 0 or 1');
 
-  const entry = await Entry.findOneAndUpdate(
-    { entryId },
-    { status: Number(approve) },
-    { new: true }
-  );
+  // 1) Load existing entry
+  const entry = await Entry.findOne({ entryId });
   if (!entry) return notFound(res, 'Entry not found');
 
-  res.json({
-    message: approve ? 'Approved' : 'Rejected',
-    entry: { entryId: entry.entryId, status: entry.status }
-  });
+  const newStatus = Number(approve);
+  if (entry.status === newStatus) {
+    return res.json({
+      message: newStatus ? 'Already approved' : 'Already rejected',
+      entry: { entryId, status: entry.status }
+    });
+  }
+
+  // 2) Flip status & save
+  entry.status = newStatus;
+  await entry.save();
+
+  let updatedEmployee;
+  let deduction;
+  let targetEmpId;
+
+  // 3) If approving, figure out whom and how much to deduct
+  if (newStatus === 1) {
+    if (entry.type === 0 && entry.employeeId) {
+      deduction   = entry.amount;
+      targetEmpId = entry.employeeId;
+    }
+    else if (entry.type === 1 && entry.worksUnder) {
+      deduction   = entry.totalAmount;
+      targetEmpId = entry.worksUnder;
+    }
+
+    if (typeof deduction === 'number' && targetEmpId) {
+      // 3a) Load employee to check balance
+      const employee = await Employee.findOne({ employeeId: targetEmpId });
+      if (!employee) return notFound(res, 'Employee to debit not found');
+
+      // 3b) If insufficient funds, reject
+      if (employee.balance < deduction) {
+        return badRequest(res, 'Insufficient balance. Please add funds before approval.');
+      }
+
+      // 4) Atomically decrement balance
+      updatedEmployee = await Employee.findOneAndUpdate(
+        { employeeId: targetEmpId },
+        { $inc: { balance: -deduction } },
+        { new: true }
+      );
+    }
+  }
+
+  // 5) Build response
+  const payload = {
+    message: newStatus ? 'Approved' : 'Rejected',
+    entry:   { entryId, status: newStatus }
+  };
+  if (updatedEmployee) {
+    payload.newBalance = updatedEmployee.balance;
+  }
+
+  res.json(payload);
 });
+
+
 
 /* ------------------------------------------------------------------ */
 /*  LIST – employee + specific link, POST /entries/listByLink         */
