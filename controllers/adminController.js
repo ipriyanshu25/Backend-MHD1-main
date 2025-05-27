@@ -90,9 +90,23 @@ exports.getEntries = asyncHandler(async (req, res) => {
   const { linkId } = req.body;
   if (!linkId) return badRequest(res, 'linkId required');
 
-  // linkId stored as string in Entry model
-  const entries = await Entry.find({ linkId }).lean();
-  res.json(entries);
+  // Fetch the link’s title
+  const linkDoc = await Link
+    .findById(linkId)            // Mongoose will cast the string to ObjectId
+    .select('title')
+    .lean();
+  if (!linkDoc) return notFound(res, 'Link not found');
+
+  // Get all entries for that linkId (stored as string)
+  const entries = await Entry
+    .find({ linkId })
+    .lean();
+
+  // Return title separately
+  res.json({
+    title:   linkDoc.title,
+    entries
+  });
 });
 
 // Get all entries for a given employee (type 0)
