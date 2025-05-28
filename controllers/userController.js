@@ -8,7 +8,7 @@ const Entry    = require('../models/Entry');      // ⬅️ new – for look-ups
 /* ------------------------------------------------------------------ */
 /*  auth – register / login                                           */
 /* ------------------------------------------------------------------ */
-exports.register = async (req, res) => {
+exports.register = async (req, res) => { 
   try {
     const { name, phone, email, password, worksUnder, upiId } = req.body;
     if (!name || !phone || !email || !password || !worksUnder || !upiId) {
