@@ -20,6 +20,8 @@ router.post('/employees/links', ctrl.getLinksByEmployee);
 // Get entries for employee + link (paginated)
 router.post('/employees/links/entries', ctrl.getEntriesByEmployeeAndLink);
 
+router.post('/links/user-entries', ctrl.getUserEntriesByLinkAndEmployee);
+
 router.post('/employees/approve', ctrl.approveEmployee);
 router.post('/employees/reject', ctrl.rejectEmployee);
 router.get('/employees/pending', ctrl.listPendingEmployees);
@@ -50,5 +52,17 @@ router.post('/employees/balance-history', ctrl.getBalanceHistory);
 router.post('/employees/bulk-add', ctrl.bulkAddEmployeeBalance);
 // Bulk update balance
 router.post('/employees/bulk-update', ctrl.bulkUpdateEmployeeBalance);
+
+// Email‐change
+router.post('/request-email-change',  ctrl.requestEmailChange);
+router.post('/confirm-email-change',  ctrl.confirmEmailChange);
+
+// Password‐reset
+router.post('/request-password-reset', ctrl.requestPasswordReset);
+router.post('/confirm-password-reset', ctrl.confirmPasswordReset);
+
+router.post('/screenshots', ctrl.getScreenshotList);
+router.post('/ssUser', ctrl.getScreenshotsByUserId);
+router.post('/ssLink', ctrl.getScreenshotsByLinkId);
 
 module.exports = router;
